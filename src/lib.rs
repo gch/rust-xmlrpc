@@ -58,13 +58,13 @@ fn escape_str(writer: &mut io::Writer, v: &str) -> Result<(), io::IoError> {
 
 fn escape_char(writer: &mut io::Writer, v: char) -> Result<(), io::IoError> {
     let mut buf = [0, .. 4];
-    v.encode_utf8(buf);
-    escape_bytes(writer, buf)
+    let len = v.encode_utf8(&mut buf).unwrap();
+    escape_bytes(writer, buf[mut ..len])
 }
 
 /// A structure for implementing serialization to XML-RPC.
 pub struct Encoder<'a> {
-    writer: &'a mut io::Writer+'a,
+    writer: &'a mut (io::Writer+'a),
 }
 
 impl<'a> Encoder<'a> {
