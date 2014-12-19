@@ -126,15 +126,22 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
         write!(self.writer, "</string>")
     }
 
-    fn emit_enum(&mut self, _name: &str, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_enum<F>(&mut self, _name: &str, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         f(self)
     }
 
-    fn emit_enum_variant(&mut self,
-                         name: &str,
-                         _id: uint,
-                         cnt: uint,
-                         f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+
+
+    fn emit_enum_variant<F>(&mut self,
+                            name: &str,
+                            _id: uint,
+                            cnt: uint,
+                            f: F)
+                            -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         // enums are encoded as strings or objects
         // Bunny => <string>Bunny</string>
         // Kangaroo(34,"William") => 
@@ -147,7 +154,7 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
         //       <name>fields</name>
         //       <value>
         //         <array>
-        //           <value><int>32</int></value>
+        //           <value><int>34</int></value>
         //           <value><string>William</string></value>
         //         </array>
         //       </value>
@@ -167,43 +174,46 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
         }
     }
 
-    fn emit_enum_variant_arg(&mut self,
-                             idx: uint,
-                             f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+
+    fn emit_enum_variant_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         if idx != 0 {
             try!(write!(self.writer, ","));
         }
         f(self)
     }
 
-    fn emit_enum_struct_variant(&mut self,
-                                name: &str,
-                                id: uint,
-                                cnt: uint,
-                                f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_enum_struct_variant<F>(&mut self,
+                                   name: &str,
+                                   id: uint,
+                                   cnt: uint,
+                                   f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         self.emit_enum_variant(name, id, cnt, f)
     }
 
-    fn emit_enum_struct_variant_field(&mut self,
-                                      _: &str,
-                                      idx: uint,
-                                      f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_enum_struct_variant_field<F>(&mut self,
+                                         _: &str,
+                                         idx: uint,
+                                         f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         self.emit_enum_variant_arg(idx, f)
     }
 
-    fn emit_struct(&mut self,
-                   _: &str,
-                   _: uint,
-                   f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_struct<F>(&mut self, _: &str, _: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         try!(write!(self.writer, "<struct>"));
         try!(f(self));
         write!(self.writer, "</struct>")
     }
 
-    fn emit_struct_field(&mut self,
-                         name: &str,
-                         idx: uint,
-                         f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_struct_field<F>(&mut self, name: &str, idx: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         try!(write!(self.writer, "<member>"));
         try!(write!(self.writer, "<name>{}</name>", name)); // FIXME: encode str?
         try!(write!(self.writer, "<value>"));
@@ -212,84 +222,92 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
         write!(self.writer, "</member>")
     }
 
-    fn emit_tuple(&mut self, len: uint, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_tuple<F>(&mut self, len: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         self.emit_seq(len, f)
     }
-    fn emit_tuple_arg(&mut self,
-                      idx: uint,
-                      f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_tuple_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         self.emit_seq_elt(idx, f)
     }
 
-    fn emit_tuple_struct(&mut self,
-                         _name: &str,
-                         len: uint,
-                         f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_tuple_struct<F>(&mut self, _name: &str, len: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         self.emit_seq(len, f)
     }
-    fn emit_tuple_struct_arg(&mut self,
-                             idx: uint,
-                             f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_tuple_struct_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         self.emit_seq_elt(idx, f)
     }
 
-    fn emit_option(&mut self, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_option<F>(&mut self, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         f(self)
     }
     fn emit_option_none(&mut self) -> EncodeResult { self.emit_nil() }
-    fn emit_option_some(&mut self, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_option_some<F>(&mut self, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         f(self)
     }
 
-    fn emit_seq(&mut self, _len: uint, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_seq<F>(&mut self, _len: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         try!(write!(self.writer, "<array><data>"));
         try!(f(self));
         write!(self.writer, "</data></array>")
     }
 
-    fn emit_seq_elt(&mut self, idx: uint, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_seq_elt<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         try!(write!(self.writer, "<value>"));
         try!(f(self));
         write!(self.writer, "</value>")
     }
 
-    fn emit_map(&mut self, _len: uint, f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
-	Ok(())
-        // FIXME: this is JSON source
-	// try!(write!(self.writer, "{{"));
-        // try!(f(self));
-        // write!(self.writer, "}}")
-    }
-
-    fn emit_map_elt_key(&mut self,
-                        idx: uint,
-                        f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
-        Ok(()) // FIXME
-        // FIXME: this is JSON source
-        // if idx != 0 { try!(write!(self.writer, ",")) }
-        // // ref #12967, make sure to wrap a key in double quotes,
-        // // in the event that its of a type that omits them (eg numbers)
-        // let mut buf = MemWriter::new();
-        // // FIXME(14302) remove the transmute and unsafe block.
-        // unsafe {
-        //     let mut check_encoder = Encoder::new(&mut buf);
-        //     try!(f(transmute(&mut check_encoder)));
-        // }
-        // let out = str::from_utf8(buf.get_ref()).unwrap();
-        // let needs_wrapping = out.char_at(0) != '"' && out.char_at_reverse(out.len()) != '"';
-        // if needs_wrapping { try!(write!(self.writer, "\"")); }
-        // try!(f(self));
-        // if needs_wrapping { try!(write!(self.writer, "\"")); }
-        // Ok(())
-    }
-
-    fn emit_map_elt_val(&mut self,
-                        _idx: uint,
-                        f: |&mut Encoder<'a>| -> EncodeResult) -> EncodeResult {
+    fn emit_map<F>(&mut self, _len: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
         Ok(())
         // FIXME: this is JSON source
-        // try!(write!(self.writer, ":"));
-        // f(self)
+        //try!(write!(self.writer, "{{"));
+        //try!(f(self));
+        //write!(self.writer, "}}")
+    }
+
+    fn emit_map_elt_key<F>(&mut self, idx: uint, mut f: F) -> EncodeResult where
+        F: FnMut(&mut Encoder<'a>) -> EncodeResult,
+    {
+        //if idx != 0 { try!(write!(self.writer, ",")) }
+        //// ref #12967, make sure to wrap a key in double quotes,
+        //// in the event that its of a type that omits them (eg numbers)
+        //let mut buf = Vec::new();
+        // // FIXME(14302) remove the transmute and unsafe block.
+        //unsafe {
+        //    let mut check_encoder = Encoder::new(&mut buf);
+        //    try!(f(transmute(&mut check_encoder)));
+        //}
+        //let out = str::from_utf8(buf[]).unwrap();
+        //let needs_wrapping = out.char_at(0) != '"' && out.char_at_reverse(out.len()) != '"';
+        //if needs_wrapping { try!(write!(self.writer, "\"")); }
+        //try!(f(self));
+        //if needs_wrapping { try!(write!(self.writer, "\"")); }
+        Ok(())
+    }
+
+    fn emit_map_elt_val<F>(&mut self, _idx: uint, f: F) -> EncodeResult where
+        F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
+    {
+        Ok(())
+        //try!(write!(self.writer, ":"));
+        //f(self)
     }
 }
 
