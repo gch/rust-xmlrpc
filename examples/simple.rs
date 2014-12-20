@@ -22,6 +22,9 @@ fn main() {
     let v = vec![1i,2i,3i,4i];
     println!("XML of int vector: {}", xmlrpc::encode(&v));
 
+    println!("XML of string Xml object: {}", xmlrpc::encode(&xmlrpc::Xml::I64(32i64)));
+    println!("XML of string Xml object: {}", xmlrpc::encode(&xmlrpc::Xml::Boolean(false)));
+
     #[deriving(Encodable)]
     struct City {
         name: &'static str,
