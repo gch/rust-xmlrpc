@@ -342,8 +342,8 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
     }
 }
 
-/*
-impl<E: Encoder<S>, S> Encodable<E, S> for Xml {
+
+impl<E: SerializeEncoder<S>, S> Encodable<E, S> for Xml {
     fn encode(&self, e: &mut E) -> Result<(), S> {
         match *self {
             Xml::I64(v) => v.encode(e),
@@ -358,7 +358,7 @@ impl<E: Encoder<S>, S> Encodable<E, S> for Xml {
         }
     }
 }
-*/
+
 
 #[cfg(test)]
 mod tests {
