@@ -29,16 +29,44 @@ XML-RPC library, including both serialization and remote procedure calling
 # What is XML-RPC?
 
 Documentation to be written ... (follow example in json.rs)
+
+Basic documentation found on Wikipedia
+    http://en.wikipedia.org/wiki/XML-RPC
+
+Full specification of the XML-RPC protocol is found here:
+    http://xmlrpc.scripting.com/spec.html
+
+Additional errata and hints can be found here:
+    http://effbot.org/zone/xmlrpc-errata.htm
 */
 
 extern crate serialize;
 
+use std::collections::{HashMap, TreeMap};
 use std::{io, fmt, mem, str};
 use std::io::MemWriter;
 use serialize::{Encodable, Decodable};
 use serialize::Encoder as SerializeEncoder;
 use std::string;
 use std::mem::{swap, transmute};
+
+/// Represents an XML-RPC data value
+#[deriving(Clone, PartialEq, PartialOrd)]
+pub enum Xml {
+     I64(i64),
+     U64(u64),
+     F64(f64),
+     String(string::String),
+     Boolean(bool),
+     Array(self::Array),
+     Object(self::Object),
+     Base64(Vec<u8>), // FIXME: added for xml-rpc, not in JSON
+     DateTime, // FIXME: need to implement
+     Null,
+ }
+
+pub type Array = Vec<Xml>;
+pub type Object = TreeMap<string::String, Xml>;
 
 /// Shortcut function to encode a `T` into a XML-RPC `String`
 pub fn encode<'a, T: Encodable<Encoder<'a>, io::IoError>>(object: &T) -> string::String {
@@ -49,6 +77,10 @@ pub fn encode<'a, T: Encodable<Encoder<'a>, io::IoError>>(object: &T) -> string:
 pub type EncodeResult = io::IoResult<()>;
 
 pub fn escape_bytes(wr: &mut io::Writer, bytes: &[u8]) -> Result<(), io::IoError> {
+    // FIXME:
+    //  replace < with &lt;
+    //  replace > with &gt;
+    //  replace & with &amp;
     wr.write(bytes[0..])
 }
 
@@ -90,34 +122,33 @@ impl<'a> Encoder<'a> {
 
 impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
     fn emit_nil(&mut self) -> EncodeResult { write!(self.writer, "<nil/>") }
-    fn emit_uint(&mut self, v: uint) -> EncodeResult { self.emit_u64(v as u64) }
-    fn emit_u64(&mut self, v: u64) -> EncodeResult { 
+    fn emit_uint(&mut self, v: uint) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_u64(&mut self, v: u64) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_u32(&mut self, v: u32) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_u16(&mut self, v: u16) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_u8(&mut self, v: u8) -> EncodeResult { self.emit_i32(v as i32) }
+
+    fn emit_int(&mut self, v: int) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_i64(&mut self, v: i64) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_i32(&mut self, v: i32) -> EncodeResult { // XML-RPC only supports 4-byte signed integer
+        // FIXME, precondition numbers to check range
         write!(self.writer, "<int>{}</int>", v)
     }
-    fn emit_u32(&mut self, v: u32) -> EncodeResult { self.emit_u64(v as u64) }
-    fn emit_u16(&mut self, v: u16) -> EncodeResult { self.emit_u64(v as u64) }
-    fn emit_u8(&mut self, v: u8) -> EncodeResult { self.emit_u64(v as u64) }
+    fn emit_i16(&mut self, v: i16) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_i8(&mut self, v: i8) -> EncodeResult { self.emit_i32(v as i32) }
 
-    fn emit_int(&mut self, v: int) -> EncodeResult { self.emit_i64(v as i64) }
-    fn emit_i64(&mut self, v: i64) -> EncodeResult { 
-        write!(self.writer, "<int>{}</int>", v)
-    }
-    fn emit_i32(&mut self, v: i32) -> EncodeResult { self.emit_i64(v as i64) }
-    fn emit_i16(&mut self, v: i16) -> EncodeResult { self.emit_i64(v as i64) }
-    fn emit_i8(&mut self, v: i8) -> EncodeResult { self.emit_i64(v as i64) }
-
-    fn emit_bool(&mut self, v: bool) -> EncodeResult { 
+    fn emit_bool(&mut self, v: bool) -> EncodeResult {
         write!(self.writer, "<boolean>{}</boolean>", v as u8)
     }
 
-    fn emit_f64(&mut self, v: f64) -> EncodeResult { 
+    fn emit_f64(&mut self, v: f64) -> EncodeResult {
         write!(self.writer, "<double>{}</double>", v)
     }
     fn emit_f32(&mut self, v: f32) -> EncodeResult { self.emit_f64(v as f64) }
 
     fn emit_char(&mut self, v: char) -> EncodeResult {
         try!(write!(self.writer, "<string>"));
-	try!(escape_char(self.writer, v));
+        try!(escape_char(self.writer, v));
         write!(self.writer, "</string>")
     }
     fn emit_str(&mut self, v: &str) -> EncodeResult {
@@ -144,7 +175,7 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
     {
         // enums are encoded as strings or objects
         // Bunny => <string>Bunny</string>
-        // Kangaroo(34,"William") => 
+        // Kangaroo(34,"William") =>
         //   <struct>
         //     <member>
         //       <name>variant</name>
@@ -310,6 +341,24 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
         //f(self)
     }
 }
+
+/*
+impl<E: Encoder<S>, S> Encodable<E, S> for Xml {
+    fn encode(&self, e: &mut E) -> Result<(), S> {
+        match *self {
+            Xml::I64(v) => v.encode(e),
+            Xml::U64(v) => v.encode(e),
+            Xml::F64(v) => v.encode(e),
+            Xml::String(ref v) => v.encode(e),
+            Xml::Boolean(v) => v.encode(e),
+            Xml::Array(ref v) => v.encode(e),
+            Xml::Object(ref v) => v.encode(e),
+            Xml::Null => e.emit_nil(),
+            _ => Ok(()), // FIXME: add other types
+        }
+    }
+}
+*/
 
 #[cfg(test)]
 mod tests {
