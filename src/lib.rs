@@ -42,8 +42,10 @@ Additional errata and hints can be found here:
 
 extern crate serialize;
 
-use std::collections::{HashMap, TreeMap};
-use std::{io, fmt, mem, str};
+use std::collections::{HashMap, BTreeMap};
+use std::{io, fmt, mem, str, num};
+use std::ops;
+
 use std::io::MemWriter;
 use serialize::{Encodable, Decodable};
 use serialize::Encoder as SerializeEncoder;
@@ -53,8 +55,7 @@ use std::mem::{swap, transmute};
 /// Represents an XML-RPC data value
 #[deriving(Clone, PartialEq, PartialOrd)]
 pub enum Xml {
-     I64(i64),
-     U64(u64),
+     I32(i32),
      F64(f64),
      String(string::String),
      Boolean(bool),
@@ -66,7 +67,7 @@ pub enum Xml {
  }
 
 pub type Array = Vec<Xml>;
-pub type Object = TreeMap<string::String, Xml>;
+pub type Object = BTreeMap<string::String, Xml>;
 
 /// Shortcut function to encode a `T` into a XML-RPC `String`
 pub fn encode<'a, T: Encodable<Encoder<'a>, io::IoError>>(object: &T) -> string::String {
@@ -343,11 +344,11 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
 }
 
 
+// FIXME: XML-RPC only does signed 32-bit integers.  Take away all other options!
 impl<E: SerializeEncoder<S>, S> Encodable<E, S> for Xml {
     fn encode(&self, e: &mut E) -> Result<(), S> {
         match *self {
-            Xml::I64(v) => v.encode(e),
-            Xml::U64(v) => v.encode(e),
+            Xml::I32(v) => v.encode(e),
             Xml::F64(v) => v.encode(e),
             Xml::String(ref v) => v.encode(e),
             Xml::Boolean(v) => v.encode(e),
@@ -359,6 +360,187 @@ impl<E: SerializeEncoder<S>, S> Encodable<E, S> for Xml {
     }
 }
 
+impl Xml {
+    /// Encodes an XML value into an io::writer. Uses a single line.
+    pub fn to_writer(&self, writer: &mut io::Writer) -> EncodeResult {
+        let mut encoder = Encoder::new(writer);
+        self.encode(&mut encoder)
+    }
+
+    /// If the XML value is an Object, returns the value associated with the provided key.
+    /// Otherwise, returns None.
+    pub fn find<'a>(&'a self, key: &str) -> Option<&'a Xml>{
+        match self {
+            &Xml::Object(ref map) => map.get(key),
+            _ => None
+        }
+    }
+
+    /// Attempts to get a nested XML Object for each key in `keys`.
+    /// If any key is found not to exist, find_path will return None.
+    /// Otherwise, it will return the Json value associated with the final key.
+    // pub fn find_path<'a>(&'a self, keys: &[&str]) -> Option<&'a Xml>{
+    //     let mut target = self;
+    //     for key in keys.iter() {
+    //         match target.find(*key) {
+    //             Some(t) => { target = t; },
+    //             None => return None
+    //         }
+    //     }
+    //     Some(target)
+    // }
+
+    /// If the XML value is an Object, performs a depth-first search until
+    /// a value associated with the provided key is found. If no value is found
+    /// or the XML value is not an Object, returns None.
+    pub fn search<'a>(&'a self, key: &str) -> Option<&'a Xml> {
+        match self {
+            &Xml::Object(ref map) => {
+                match map.get(key) {
+                    Some(xml_value) => Some(xml_value),
+                    None => {
+                        for (_, v) in map.iter() {
+                            match v.search(key) {
+                                x if x.is_some() => return x,
+                                _ => ()
+                            }
+                        }
+                        None
+                    }
+                }
+            },
+            _ => None
+        }
+    }
+
+    /// Returns true if the XML value is an Object. Returns false otherwise.
+    pub fn is_object<'a>(&'a self) -> bool {
+        self.as_object().is_some()
+    }
+
+    /// If the XML value is an Object, returns the associated BTreeMap.
+    /// Returns None otherwise.
+    pub fn as_object<'a>(&'a self) -> Option<&'a Object> {
+        match self {
+            &Xml::Object(ref map) => Some(map),
+            _ => None
+        }
+    }
+
+    /// Returns true if the XML value is an Array. Returns false otherwise.
+    pub fn is_array<'a>(&'a self) -> bool {
+        self.as_array().is_some()
+    }
+
+    /// If the XML value is an Array, returns the associated vector.
+    /// Returns None otherwise.
+    pub fn as_array<'a>(&'a self) -> Option<&'a Array> {
+        match self {
+            &Xml::Array(ref array) => Some(&*array),
+            _ => None
+        }
+    }
+
+    /// Returns true if the XML value is a String. Returns false otherwise.
+    pub fn is_string<'a>(&'a self) -> bool {
+        self.as_string().is_some()
+    }
+
+    /// If the Xml value is a String, returns the associated str.
+    /// Returns None otherwise.
+    pub fn as_string<'a>(&'a self) -> Option<&'a str> {
+        match *self {
+            Xml::String(ref s) => Some(s.as_slice()),
+            _ => None
+        }
+    }
+
+    /// Returns true if the XML value is a Number. Returns false otherwise.
+    pub fn is_number(&self) -> bool {
+        match *self {
+            Xml::I32(_) | Xml::F64(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the XML value is a i32. Returns false otherwise.
+    pub fn is_i32(&self) -> bool {
+        match *self {
+            Xml::I32(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Returns true if the XML value is a f64. Returns false otherwise.
+    pub fn is_f64(&self) -> bool {
+        match *self {
+            Xml::F64(_) => true,
+            _ => false,
+        }
+    }
+
+    /// If the XML value is a number, return or cast it to a i64.
+    /// Returns None otherwise.
+    pub fn as_i32(&self) -> Option<i32> {
+        match *self {
+            Xml::I32(n) => Some(n),
+            _ => None
+        }
+    }
+
+    /// If the XML value is a number, return or cast it to a f64.
+    /// Returns None otherwise.
+    pub fn as_f64(&self) -> Option<f64> {
+        match *self {
+            Xml::I32(n) => num::cast(n),
+            Xml::F64(n) => Some(n),
+            _ => None
+        }
+    }
+
+    /// Returns true if the Xml value is a Boolean. Returns false otherwise.
+    pub fn is_boolean(&self) -> bool {
+        self.as_boolean().is_some()
+    }
+
+    /// If the Xml value is a Boolean, returns the associated bool.
+    /// Returns None otherwise.
+    pub fn as_boolean(&self) -> Option<bool> {
+        match self {
+            &Xml::Boolean(b) => Some(b),
+            _ => None
+        }
+    }
+
+    /// Returns true if the XML value is a Null. Returns false otherwise.
+    pub fn is_null(&self) -> bool {
+        self.as_null().is_some()
+    }
+
+    /// If the XML value is a Null, returns ().
+    /// Returns None otherwise.
+    pub fn as_null(&self) -> Option<()> {
+        match self {
+            &Xml::Null => Some(()),
+            _ => None
+        }
+    }
+}
+
+impl<'a> ops::Index<&'a str, Xml>  for Xml {
+    fn index(&self, idx: & &str) -> &Xml {
+        self.find(*idx).unwrap()
+    }
+}
+
+impl ops::Index<uint, Xml> for Xml {
+    fn index<'a>(&'a self, idx: &uint) -> &'a Xml {
+        match self {
+            &Xml::Array(ref v) => v.index(idx),
+            _ => panic!("can only index XML with uint if it is an array")
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
