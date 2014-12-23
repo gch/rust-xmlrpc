@@ -343,8 +343,6 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
     }
 }
 
-
-// FIXME: XML-RPC only does signed 32-bit integers.  Take away all other options!
 impl<E: SerializeEncoder<S>, S> Encodable<E, S> for Xml {
     fn encode(&self, e: &mut E) -> Result<(), S> {
         match *self {
@@ -379,16 +377,16 @@ impl Xml {
     /// Attempts to get a nested XML Object for each key in `keys`.
     /// If any key is found not to exist, find_path will return None.
     /// Otherwise, it will return the Json value associated with the final key.
-    // pub fn find_path<'a>(&'a self, keys: &[&str]) -> Option<&'a Xml>{
-    //     let mut target = self;
-    //     for key in keys.iter() {
-    //         match target.find(*key) {
-    //             Some(t) => { target = t; },
-    //             None => return None
-    //         }
-    //     }
-    //     Some(target)
-    // }
+    pub fn find_path<'a>(&'a self, keys: &[&str]) -> Option<&'a Xml>{
+        let mut target = self;
+        for key in keys.iter() {
+            match target.find(*key) {
+                Some(t) => { target = t; },
+                None => return None
+            }
+        }
+        Some(target)
+    }
 
     /// If the XML value is an Object, performs a depth-first search until
     /// a value associated with the provided key is found. If no value is found

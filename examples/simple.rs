@@ -47,7 +47,6 @@ fn main() {
     //let p = Person { name: "Clark", age: 35 };
     //println!("XML of person: {}", xmlrpc::encode(&xmlrpc::Xml::Object(p)));
 
-
     #[deriving(Encodable)]
     struct City {
         name: &'static str,
@@ -57,14 +56,13 @@ fn main() {
         lon: f32,
     }
 
-    // FIXME: iters not working right now??
-    // for city in [
-    //     City { name: "São Paulo", lat: -23.55,     lon: -46.633333 },
-    //     City { name: "Lima",      lat: -12.043333, lon: -77.028333 },
-    //     City { name: "Santiago",  lat: -33.45,     lon: -70.666667 },
-    // ].iter() {
-    //     // `encode` encodes an `Encodable` implementor into a `String`
-    //     println!("JSON: {}", json::encode(city));
-    //     println!("XML: {}", xmlrpc::encode(city));
-    // }
+    for city in [
+        City { name: "São Paulo", lat: -23.55,     lon: -46.633333 },
+        City { name: "Lima",      lat: -12.043333, lon: -77.028333 },
+        City { name: "Santiago",  lat: -33.45,     lon: -70.666667 },
+    ].iter() {
+        // `encode` encodes an `Encodable` implementor into a `String`
+        println!("JSON: {}", json::encode(city));
+        println!("XML: {}", xmlrpc::encode(city));
+    }
 }
