@@ -11,6 +11,9 @@
 // Derived from Rust JSON library
 // https://github.com/rust-lang/rustc-serialize
 
+use self::ErrorCode::*;
+use self::ParserError::*;
+
 use std::collections::{HashMap, BTreeMap};
 use std::error::Error as StdError;
 use std::mem::{swap, transmute};
@@ -25,8 +28,8 @@ use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::Encoder as SerializeEncoder;
 
 use xml;
-use xml::reader::EventReader;
-use xml::reader::events::XmlEvent;
+use xml::EventReader;
+use xml::reader::events;
 
 /// Represents an XML-RPC data value
 #[derive(Clone, PartialEq, PartialOrd, Show)]
@@ -47,13 +50,44 @@ pub type Object = BTreeMap<string::String, Xml>;
 
 pub struct AsXml<'a, T: 'a> { inner: &'a T }
 
+/// The errors that can arise while parsing an XML stream.
+#[derive(Clone, Copy, PartialEq)]
+pub enum ErrorCode {
+    InvalidSyntax,
+    EOFWhileParsingObject,
+    EOFWhileParsingArray,
+    EOFWhileParsingValue,
+    EOFWhileParsingString,
+}
+
+#[derive(Clone, Copy, PartialEq, Show)]
+pub enum ParserError {
+    /// msg, line, col
+    SyntaxError(ErrorCode, usize, usize),
+    IoError(io::IoErrorKind, &'static str),
+}
+
+// Builder and Parser have the same errors.
+pub type BuilderError = ParserError;
+
 #[derive(Clone, PartialEq, Show)]
 pub enum DecoderError {
-    //ParseError(ParserError),
+    ParseError(ParserError),
     ExpectedError(string::String, string::String),
     MissingFieldError(string::String),
     UnknownVariantError(string::String),
     ApplicationError(string::String)
+}
+
+/// Returns a readable error string for a given error code.
+pub fn error_str(error: ErrorCode) -> &'static str {
+    match error {
+        InvalidSyntax => "invalid syntax",
+        EOFWhileParsingObject => "EOF While parsing object",
+        EOFWhileParsingArray => "EOF While parsing array",
+        EOFWhileParsingValue => "EOF While parsing value",
+        EOFWhileParsingString => "EOF While parsing string",
+    }
 }
 
 /*
@@ -78,23 +112,31 @@ pub fn encode<T: Encodable>(object: &T) -> string::String {
     s
 }
 
+impl fmt::Show for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        error_str(*self).fmt(f)
+    }
+}
+
+fn io_error_to_error(io: io::IoError) -> ParserError {
+    ParserError::IoError(io.kind, io.desc)
+}
+
 impl StdError for DecoderError {
     fn description(&self) -> &str { "decoder error" }
     fn detail(&self) -> Option<std::string::String> { Some(format!("{:?}", self)) }
     fn cause(&self) -> Option<&StdError> {
         match *self {
-            //DecoderError::ParseError(ref e) => Some(e as &StdError),
+            DecoderError::ParseError(ref e) => Some(e as &StdError),
             _ => None,
         }
     }
 }
 
-/*
 impl StdError for ParserError {
     fn description(&self) -> &str { "failed to parse xml" }
     fn detail(&self) -> Option<std::string::String> { Some(format!("{:?}", self)) }
 }
-*/
 
 pub type EncodeResult = fmt::Result;
 pub type DecodeResult<T> = Result<T, DecoderError>;
@@ -363,7 +405,24 @@ impl Encodable for Xml {
     }
 }
 
+/// Create an `AsXml` wrapper which can be used to print a value as XML
+/// on-the-fly via `write!`
+pub fn as_xml<T: Encodable>(t: &T) -> AsXml<T> {
+    AsXml { inner: t }
+}
+
+
 impl Xml {
+
+    pub fn from_str(s: &str) -> Result<Self, BuilderError> {
+        //let mut builder = Builder::new(s.chars());
+        //builder.build()
+        let rdr = io::MemReader::new(String::from_str(s).into_bytes());
+        let brdr = io::BufferedReader::new(rdr);
+        let mut builder = Builder::new(brdr);
+        builder.build()
+    }
+
     /// If the XML value is an Object, returns the value associated with the provided key.
     /// Otherwise, returns None.
     pub fn find<'a>(&'a self, key: &str) -> Option<&'a Xml>{
@@ -543,6 +602,343 @@ impl Index<usize> for Xml {
     }
 }
 
+/// The output of the streaming parser.
+#[derive(PartialEq, Clone, Show)]
+pub enum XmlEvent {
+    ObjectStart, // <struct>
+    ObjectEnd, // </struct>
+    MemberStart, // <member>
+    MemberEnd, // </member>
+    NameStart, // <name>
+    NameValue(string::String),
+    NameEnd, // </name>
+    ValueStart, // <value>
+    ValueEnd, // </value>
+    ArrayStart, // <array>
+    ArrayEnd, // </array>
+    DataStart, // <data>
+    DataEnd, // </data>
+    BooleanStart, // <boolean>
+    BooleanValue(bool),
+    BooleanEnd, // </boolean>
+    I32Start, // <int> or <i4>
+    I32Value(i32),
+    I32End, // </int> or </i4>
+    F64Start, // <double>
+    F64Value(f64),
+    F64End, // </double>
+    StringStart, // <string>
+    StringValue(string::String),
+    StringEnd, // </string>
+    NullStart, // <nil/>
+    NullEnd, // <nil/>
+    // FIXME: datetime
+    // FIXME: Base64
+    Error(ParserError) // FIXME: add error types
+}
+
+struct Builder<B: Buffer> {
+    parser: EventReader<B>,
+    token: Option<XmlEvent>,
+}
+
+impl<B: Buffer> Builder<B> {
+    /// Create an XML Builder.
+    pub fn new(src: B) -> Builder<B> {
+        Builder { parser: EventReader::new(src), token: None, }
+    }
+
+
+    pub fn build(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let result = self.build_value();
+        self.bump();
+        match self.token {
+            None => {}
+            Some(XmlEvent::Error(e)) => { return Err(e); }
+            ref tok => { panic!("unexpected token {:?}", tok.clone()); }
+        }
+        result
+        /* // previous, simpler version
+        match self.build_value() {
+            Ok(v) => Ok(v),
+            Err(e) => Err(DecoderError::MissingFieldError("foobar".to_string())), // FIXME
+        }
+        */
+    }
+
+    fn bump(&mut self) {
+        let mut n = self.parser.next();
+        loop {
+            match n {
+                // FIXME: terser version
+                events::XmlEvent::StartDocument{version: _, encoding: _, standalone: _} => (),
+                _ => break,
+            }
+            n = self.parser.next();
+        }
+        self.token = match n {
+            events::XmlEvent::StartElement { name, attributes: _, namespace: _ } => {
+                self.parse_tag_start(name.local_name.as_slice())
+            }
+            events::XmlEvent::EndElement { name } => {
+                self.parse_tag_end(name.local_name.as_slice())
+            }
+            events::XmlEvent::Characters(s) => {
+                self.parse_tag_characters(s.as_slice(), &self.token)
+            }
+            events::XmlEvent::EndDocument => {
+                None
+            }
+            _ => None,
+        }
+    }
+
+    pub fn build_value(&mut self) -> Result<Xml, BuilderError> {
+        match self.token {
+            // all values must begin with opening tag
+            Some(XmlEvent::ObjectStart) => self.build_object(),
+            Some(XmlEvent::ArrayStart) => self.build_array(),
+            Some(XmlEvent::NullStart) => self.build_nil(),
+            Some(XmlEvent::I32Start) => self.build_i32(),
+            Some(XmlEvent::F64Start) => self.build_f64(),
+            Some(XmlEvent::BooleanStart) => self.build_boolean(),
+            Some(XmlEvent::StringStart) => self.build_string(),
+            // error otherwise
+            Some(XmlEvent::ObjectEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::ArrayEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::NullEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::I32End) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::F64End) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::BooleanEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::StringEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::NameStart) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::NameEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::MemberStart) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::MemberEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::DataStart) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::DataEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::ValueStart) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::ValueEnd) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::I32Value(_)) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::F64Value(_)) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::BooleanValue(_)) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::StringValue(_)) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::NameValue(_)) => Err(SyntaxError(InvalidSyntax, 0, 0)),
+            Some(XmlEvent::Error(e)) => Err(e),
+            None => Err(SyntaxError(EOFWhileParsingValue,0,0)),
+        }
+    }
+
+    fn build_object(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let mut values = BTreeMap::new();
+        loop {
+            match self.token {
+                Some(XmlEvent::ObjectEnd) => {
+                    return Ok(Xml::Object(values));
+                }
+                _ => {}
+            }
+            // FIXME: use error codes appropriate for the cause
+            // looking for <member>
+            if self.token != Some(XmlEvent::MemberStart) {
+                return Err(SyntaxError(InvalidSyntax,0,0));
+            }
+            self.bump(); // looking for <name>
+            if self.token != Some(XmlEvent::NameStart) {
+                return Err(SyntaxError(InvalidSyntax,0,0));
+            }
+            self.bump(); // looking for string value inside name
+            let key = match self.token {
+                Some(XmlEvent::NameValue(ref s)) => s.to_string(),
+                _ => { return Err(SyntaxError(InvalidSyntax,0,0)); }
+            };
+            self.bump(); // looking for </name>
+            if self.token != Some(XmlEvent::NameEnd) {
+                return Err(SyntaxError(InvalidSyntax,0,0));
+            }
+            self.bump(); // looking for <value>
+            if self.token != Some(XmlEvent::ValueStart) {
+                return Err(SyntaxError(InvalidSyntax,0,0));
+            }
+            self.bump(); // parse whatever value is inside
+            match self.build_value() {
+                Ok(value) => { values.insert(key, value); }
+                Err(e) => { return Err(e); }
+            }
+            self.bump(); // looking for </value>
+            if self.token != Some(XmlEvent::ValueEnd) {
+                return Err(SyntaxError(InvalidSyntax,0,0));
+            }
+            self.bump(); // looking for </member>
+            if self.token != Some(XmlEvent::MemberEnd) {
+                return Err(SyntaxError(InvalidSyntax,0,0));
+            }
+            self.bump();
+        }
+    }
+
+    fn build_array(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let mut values = Vec::new();
+        loop {
+            if self.token == Some(XmlEvent::ArrayEnd) {
+                return Ok(Xml::Array(values.into_iter().collect()));
+            }
+            if self.token == Some(XmlEvent::ValueStart) {
+                self.bump();
+                match self.build_value() {
+                    Ok(v) => values.push(v),
+                    Err(e) => { return Err(e) }
+                }
+                self.bump();
+                match self.token {
+                    Some(XmlEvent::ValueEnd) => (),
+                    _ => { return Err(SyntaxError(InvalidSyntax,0,0)); }
+                }
+            }
+            self.bump();
+        }
+    }
+
+    fn build_nil(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        match self.token {
+            Some(XmlEvent::NullEnd) => Ok(Xml::Null),
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        }
+    }
+
+    fn build_boolean(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let val = match self.token {
+            Some(XmlEvent::BooleanValue(b)) => Ok(Xml::Boolean(b)), // FIXME
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        };
+        self.bump();
+        match self.token {
+            Some(XmlEvent::BooleanEnd) => val,
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        }
+    }
+
+    fn build_i32(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let val = match self.token {
+            Some(XmlEvent::I32Value(v)) => Ok(Xml::I32(v)),
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        };
+        self.bump();
+        match self.token {
+            Some(XmlEvent::I32End) => val,
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        }
+    }
+
+    fn build_f64(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let val = match self.token {
+            Some(XmlEvent::F64Value(v)) => Ok(Xml::F64(v)),
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        };
+        self.bump();
+        match self.token {
+            Some(XmlEvent::F64End) => val,
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        }
+    }
+
+    fn build_string(&mut self) -> Result<Xml, BuilderError> {
+        self.bump();
+        let val = match self.token {
+            Some(XmlEvent::StringValue(ref s)) => Ok(Xml::String(s.to_string())),
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        };
+        self.bump();
+        match self.token {
+            Some(XmlEvent::StringEnd) => val,
+            _ => Err(SyntaxError(InvalidSyntax,0,0)),
+        }
+    }
+
+    fn parse_bool_value(&self, s: &str) -> Option<XmlEvent> {
+        match s {
+            "0" => Some(XmlEvent::BooleanValue(false)),
+            "1" => Some(XmlEvent::BooleanValue(true)),
+            _ => None
+        }
+    }
+
+    fn parse_i32_value(&self, s: &str) -> Option<XmlEvent> {
+        match s.parse::<i32>() {
+            Some(n) => Some(XmlEvent::I32Value(n)),
+            None => None
+        }
+    }
+    fn parse_f64_value(&self, s: &str) -> Option<XmlEvent> {
+        match s.parse::<f64>() {
+            Some(n) => Some(XmlEvent::F64Value(n)),
+            None => None
+        }
+    }
+    fn parse_string_value(&self, s: &str) -> Option<XmlEvent> {
+        Some(XmlEvent::StringValue(s.to_string()))
+    }
+    fn parse_name_value(&self, s: &str) -> Option<XmlEvent> {
+        Some(XmlEvent::NameValue(s.to_string()))
+    }
+    fn parse_tag_start(&self, name: &str) -> Option<XmlEvent> {
+        return match name {
+            "struct" => Some(XmlEvent::ObjectStart),
+            "member" => Some(XmlEvent::MemberStart),
+            "name" => Some(XmlEvent::NameStart),
+            "value" => Some(XmlEvent::ValueStart),
+            "array" => Some(XmlEvent::ArrayStart),
+            "data" => Some(XmlEvent::DataStart),
+            "boolean" => Some(XmlEvent::BooleanStart),
+            "int" => Some(XmlEvent::I32Start),
+            "double" => Some(XmlEvent::F64Start),
+            "string" => Some(XmlEvent::StringStart),
+            "nil" => Some(XmlEvent::NullStart),
+            _ => None,
+        }
+    }
+
+    fn parse_tag_end(&self, name: &str) -> Option<XmlEvent> {
+        return match name {
+            "struct" => Some(XmlEvent::ObjectEnd),
+            "member" => Some(XmlEvent::MemberEnd),
+            "name" => Some(XmlEvent::NameEnd),
+            "value" => Some(XmlEvent::ValueEnd),
+            "array" => Some(XmlEvent::ArrayEnd),
+            "data" => Some(XmlEvent::DataEnd),
+            "boolean" => Some(XmlEvent::BooleanEnd),
+            "int" => Some(XmlEvent::I32End),
+            "double" => Some(XmlEvent::F64End),
+            "string" => Some(XmlEvent::StringEnd),
+            "nil" => Some(XmlEvent::NullEnd),
+            _ => None,
+        }
+    }
+
+    fn parse_tag_characters(&self, s: &str, token: &Option<XmlEvent>) -> Option<XmlEvent> {
+        match token {
+            &Some(XmlEvent::BooleanStart) => self.parse_bool_value(s),
+            &Some(XmlEvent::I32Start) => self.parse_i32_value(s),
+            &Some(XmlEvent::F64Start) => self.parse_f64_value(s),
+            &Some(XmlEvent::StringStart) => self.parse_string_value(s),
+            &Some(XmlEvent::NameStart) => self.parse_name_value(s),
+            _ => None,
+        }
+    }
+}
+
+/// A structure to decode JSON to values in rust.
+pub struct Decoder {
+    stack: Vec<Xml>,
+}
+
 /// A trait for converting values to XML
 pub trait ToXml {
     /// Converts the value of `self` to an instance of XML
@@ -666,6 +1062,42 @@ impl<A:ToXml> ToXml for Option<A> {
         }
     }
 }
+
+struct FormatShim<'a, 'b: 'a> {
+    inner: &'a mut fmt::Formatter<'b>,
+}
+
+impl<'a, 'b> fmt::Writer for FormatShim<'a, 'b> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        self.inner.write_str(s)
+    }
+}
+
+impl fmt::String for Xml {
+    /// Encodes an XML value into a string
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut shim = FormatShim { inner: f };
+        let mut encoder = Encoder::new(&mut shim);
+        self.encode(&mut encoder)
+    }
+}
+
+impl<'a, T: Encodable> fmt::String for AsXml<'a, T> {
+    /// Encodes an XML value into a string
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut shim = FormatShim { inner: f };
+        let mut encoder = Encoder::new(&mut shim);
+        self.inner.encode(&mut encoder)
+    }
+}
+
+/*
+impl FromStr for Xml {
+    fn from_str(s: &str) -> Option<Xml> {
+        Xml::from_str(s).ok()
+    }
+}
+*/
 
 #[cfg(test)]
 mod tests {
