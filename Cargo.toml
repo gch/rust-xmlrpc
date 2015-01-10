@@ -15,6 +15,9 @@ path = "src/lib.rs"
 rustc-serialize = "0.2.7"
 # hyper = 0.0.17 # FIXME
 
+[dependencies.xml-rs]
+git = "https://github.com/netvl/xml-rs.git"
+
 [[example]]
 name = "simple"
 path = "examples/simple.rs"
