@@ -5,64 +5,91 @@ use rustc_serialize::json;
 
 fn main() {
 
-    println!("XML of string: {}", xmlrpc::encode(&"hello world!".to_string()));
-    println!("XML of char: {}", xmlrpc::encode(&'c'));
-    println!("XML of int: {}", xmlrpc::encode(&9248is));
-    println!("XML of float: {}", xmlrpc::encode(&19824.28824f32));
-    println!("XML of bool (true): {}", xmlrpc::encode(&true));
-    println!("XML of bool (false): {}", xmlrpc::encode(&false));
+    println!("This module shows basic functionality of serialization for the XML-RPC protocol.");
+    
+    println!("\n==== Strings ====");
+    let a = "Hello, world!".to_string();
+    println!("Before encode: {}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: String = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {}", c);
 
-    #[derive(RustcEncodable)]
-    struct MyStruct {
-        value: String
+    println!("\n==== Char ====");
+    let a: char = 'a';
+    println!("Before encode: {}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: char = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {}", c);
+
+    println!("\n==== Integer ====");
+    let a = 18283i32;
+    println!("Before encode: {}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: i32 = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {}", c);
+
+    println!("\n==== Floating ====");
+    let a = 3.1415926;
+    println!("Before encode: {}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: f64 = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {}", c);
+
+    println!("\n==== Booleans ====");
+    let a = true;
+    println!("Before encode: {}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: bool = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {}", c);
+
+    let a = false;
+    println!("Before encode: {}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: bool = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {}", c);
+
+    println!("\n==== Int Vector ====");
+    let a = vec![1i32,2,3,4,5,6,7,8];
+    println!("Before encode: {:?}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: Vec<i32> = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {:?}", c);
+
+    println!("\n==== Tuple ====");
+    let a = ("hello".to_string(), 1.001);
+    println!("Before encode: {:?}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: (String, f64) = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {:?}", c);
+
+
+    println!("\n==== Struct ====");
+    #[derive(Show,RustcEncodable,RustcDecodable)]
+    struct Person {
+        name: String,
+        age: i32,
     }
-    let m: MyStruct = MyStruct { value: "foobar".to_string() };
-    //println!("XML of struct: {}", xmlrpc::encode(&m)); // FIXME: fix object encoding
+    let a = Person { name: "Dave".to_string(), age: 18 };
+    println!("Before encode: {:?}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
+    let c: Person = xmlrpc::decode(b.as_slice()).unwrap();
+    println!("After decode: {:?}", c);
 
-    let v = vec![1i32,2,3,4];
-    println!("XML of int vector: {}", xmlrpc::encode(&v));
 
-    println!("XML of string Xml object: {}", xmlrpc::encode(&xmlrpc::Xml::I32(32)));
-    println!("XML of string Xml object: {}", xmlrpc::encode(&xmlrpc::Xml::Boolean(false)));
-
-    let v = vec![xmlrpc::Xml::I32(31),
+    println!("\n==== Vector of Xml values ====");
+    let a = vec![xmlrpc::Xml::I32(31),
                  xmlrpc::Xml::Boolean(true),
                  xmlrpc::Xml::String("hello world!".to_string())];
-    println!("XML of xml vector: {}", xmlrpc::encode(&v));
-    println!("JSON of same xml vector: {}", json::encode(&v));
-
-    // grab a string value out of an xml value
-    println!("Is index 0 a string? {}", v[1].is_string());
-    println!("Is index 1 a string? {}", v[1].is_string());
-    println!("Is index 2 a string? {}", v[2].is_string());
-    println!("Index 2 as a string: {}", v[2].as_string().unwrap());
-
-    // make an Xml object of an arbitrary struct
-    // FIXME: is there a way to automatically translate this into BTreeMap?
-    //#[derive(RustcEncodable)]
-    //struct Person {
-    //    name: &'static str,
-    //    age: i32
-    //}
-    //let p = Person { name: "Clark", age: 35 };
-    //println!("XML of person: {}", xmlrpc::encode(&xmlrpc::Xml::Object(p)));
-
-    #[derive(RustcEncodable)]
-    struct City {
-        name: &'static str,
-        // Latitude
-        lat: f32,
-        // Longitude
-        lon: f32,
-    }
-
-    for city in [
-        City { name: "São Paulo", lat: -23.55,     lon: -46.633333 },
-        City { name: "Lima",      lat: -12.043333, lon: -77.028333 },
-        City { name: "Santiago",  lat: -33.45,     lon: -70.666667 },
-    ].iter() {
-        // `encode` encodes an `Encodable` implementor into a `String`
-        println!("JSON: {}", json::encode(city));
-        println!("XML: {}", xmlrpc::encode(city));
-    }
+    println!("Before encode: {:?}", a);
+    let b = xmlrpc::encode(&a);
+    println!("After encode: {}", b);
 }
