@@ -7,7 +7,7 @@ fn main() {
 
     println!("XML of string: {}", xmlrpc::encode(&"hello world!".to_string()));
     println!("XML of char: {}", xmlrpc::encode(&'c'));
-    println!("XML of int: {}", xmlrpc::encode(&9248i));
+    println!("XML of int: {}", xmlrpc::encode(&9248is));
     println!("XML of float: {}", xmlrpc::encode(&19824.28824f32));
     println!("XML of bool (true): {}", xmlrpc::encode(&true));
     println!("XML of bool (false): {}", xmlrpc::encode(&false));
@@ -17,9 +17,9 @@ fn main() {
         value: String
     }
     let m: MyStruct = MyStruct { value: "foobar".to_string() };
-    println!("XML of struct: {}", xmlrpc::encode(&m));
+    //println!("XML of struct: {}", xmlrpc::encode(&m)); // FIXME: fix object encoding
 
-    let v = vec![1i,2i,3i,4i];
+    let v = vec![1i32,2,3,4];
     println!("XML of int vector: {}", xmlrpc::encode(&v));
 
     println!("XML of string Xml object: {}", xmlrpc::encode(&xmlrpc::Xml::I32(32)));
@@ -47,6 +47,7 @@ fn main() {
     //let p = Person { name: "Clark", age: 35 };
     //println!("XML of person: {}", xmlrpc::encode(&xmlrpc::Xml::Object(p)));
 
+    /* // FIXME: add back in after we re-enable object encoding
     #[deriving(Encodable)]
     struct City {
         name: &'static str,
@@ -65,4 +66,5 @@ fn main() {
         println!("JSON: {}", json::encode(city));
         println!("XML: {}", xmlrpc::encode(city));
     }
+    */
 }

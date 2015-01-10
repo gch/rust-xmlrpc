@@ -22,6 +22,7 @@
 #![allow(missing_docs)]
 
 #![feature(slicing_syntax)]
+#![feature(int_uint)] // FIXME: remove
 
 /*!
 XML-RPC library, including both serialization and remote procedure calling
@@ -69,59 +70,54 @@ pub enum Xml {
 pub type Array = Vec<Xml>;
 pub type Object = BTreeMap<string::String, Xml>;
 
+/// Shortcut function to encode a `T` into an XML-RPC `String`
+pub fn encode<T: Encodable>(object: &T) -> string::String {
+    let mut s = String::new();
+    {
+        let mut encoder = Encoder::new(&mut s);
+        let _ = object.encode(&mut encoder);
+    }
+    s
+}
+
 /// Shortcut function to encode a `T` into a XML-RPC `String`
-pub fn encode<'a, T: Encodable<Encoder<'a>, io::IoError>>(object: &T) -> string::String {
-    let buff = Encoder::buffer_encode(object);
-    string::String::from_utf8(buff).unwrap()
+//pub fn encode<'a, T: Encodable<Encoder<'a>, io::IoError>>(object: &T) -> string::String {
+//    let buff = Encoder::buffer_encode(object);
+//    string::String::from_utf8(buff).unwrap()
+//}
+
+pub type EncodeResult = fmt::Result;
+//pub type DecodeResult<T> = Result<T, DecoderError>;
+
+fn escape_str(wr: &mut fmt::Writer, v: &str) -> fmt::Result {
+    // FIXME: xml encodings
+    wr.write_str(v)
 }
 
-pub type EncodeResult = io::IoResult<()>;
-
-pub fn escape_bytes(wr: &mut io::Writer, bytes: &[u8]) -> Result<(), io::IoError> {
-    // FIXME:
-    //  replace < with &lt;
-    //  replace > with &gt;
-    //  replace & with &amp;
-    wr.write(bytes[0..])
-}
-
-fn escape_str(writer: &mut io::Writer, v: &str) -> Result<(), io::IoError> {
-    escape_bytes(writer, v.as_bytes())
-}
-
-fn escape_char(writer: &mut io::Writer, v: char) -> Result<(), io::IoError> {
-    let mut buf = [0, .. 4];
-    let len = v.encode_utf8(&mut buf).unwrap();
-    escape_bytes(writer, buf[mut ..len])
+fn escape_char(writer: &mut fmt::Writer, v: char) -> fmt::Result {
+    let mut buf = [0; 4];
+    let n = v.encode_utf8(&mut buf).unwrap();
+    let buf = unsafe { str::from_utf8_unchecked(&buf[0..n]) };
+    escape_str(writer, buf)
 }
 
 /// A structure for implementing serialization to XML-RPC.
 pub struct Encoder<'a> {
-    writer: &'a mut (io::Writer+'a),
+    writer: &'a mut (fmt::Writer+'a),
 }
 
 impl<'a> Encoder<'a> {
     /// Creates a new XML-RPC encoder whose output will be written to the writer
     /// specified.
-    pub fn new(writer: &'a mut io::Writer) -> Encoder<'a> {
+    pub fn new(writer: &'a mut fmt::Writer) -> Encoder<'a> {
         Encoder { writer: writer }
-    }
-
-    /// Encode the specified object into a buffer [u8]
-    pub fn buffer_encode<T:Encodable<Encoder<'a>, io::IoError>>(object: &T) -> Vec<u8>  {
-        //Serialize the object in a string using a writer
-        let mut m = MemWriter::new();
-        // FIXME(14302) remove the transmute and unsafe block.
-        unsafe {
-            let mut encoder = Encoder::new(&mut m as &mut io::Writer);
-            // MemWriter never Errs
-            let _ = object.encode(transmute(&mut encoder));
-        }
-        m.unwrap()
     }
 }
 
-impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
+impl<'a> SerializeEncoder for Encoder<'a> {
+    type Error = fmt::Error;
+    //type Error = std::io::IoError; // FIXME: remove
+
     fn emit_nil(&mut self) -> EncodeResult { write!(self.writer, "<nil/>") }
     fn emit_uint(&mut self, v: uint) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_u64(&mut self, v: u64) -> EncodeResult { self.emit_i32(v as i32) }
@@ -343,15 +339,15 @@ impl<'a> SerializeEncoder<io::IoError> for Encoder<'a> {
     }
 }
 
-impl<E: SerializeEncoder<S>, S> Encodable<E, S> for Xml {
-    fn encode(&self, e: &mut E) -> Result<(), S> {
+impl Encodable for Xml {
+    fn encode<E: SerializeEncoder>(&self, e: &mut E) -> Result<(), E::Error> {
         match *self {
             Xml::I32(v) => v.encode(e),
             Xml::F64(v) => v.encode(e),
             Xml::String(ref v) => v.encode(e),
             Xml::Boolean(v) => v.encode(e),
             Xml::Array(ref v) => v.encode(e),
-            Xml::Object(ref v) => v.encode(e),
+            //Xml::Object(ref v) => v.encode(e),
             Xml::Null => e.emit_nil(),
             _ => Ok(()), // FIXME: add other types
         }
@@ -359,12 +355,6 @@ impl<E: SerializeEncoder<S>, S> Encodable<E, S> for Xml {
 }
 
 impl Xml {
-    /// Encodes an XML value into an io::writer. Uses a single line.
-    pub fn to_writer(&self, writer: &mut io::Writer) -> EncodeResult {
-        let mut encoder = Encoder::new(writer);
-        self.encode(&mut encoder)
-    }
-
     /// If the XML value is an Object, returns the value associated with the provided key.
     /// Otherwise, returns None.
     pub fn find<'a>(&'a self, key: &str) -> Option<&'a Xml>{
@@ -525,13 +515,17 @@ impl Xml {
     }
 }
 
-impl<'a> ops::Index<&'a str, Xml>  for Xml {
+impl<'a> ops::Index<&'a str>  for Xml {
+    type Output = Xml;
+
     fn index(&self, idx: & &str) -> &Xml {
         self.find(*idx).unwrap()
     }
 }
 
-impl ops::Index<uint, Xml> for Xml {
+impl ops::Index<uint> for Xml {
+    type Output = Xml;
+
     fn index<'a>(&'a self, idx: &uint) -> &'a Xml {
         match self {
             &Xml::Array(ref v) => v.index(idx),
