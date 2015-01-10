@@ -47,17 +47,19 @@ Additional errata and hints can be found here:
 extern crate "rustc-serialize" as rustc_serialize;
 
 use std::collections::{HashMap, BTreeMap};
-use std::{io, fmt, mem, str, num};
-use std::ops;
+use std::error::Error as StdError;
+use std::mem::{swap, transmute};
+use std::num::{Float, Int};
+use std::ops::Index;
+use std::str::{FromStr};
+use std::string;
+use std::{char, f64, fmt, io, num, str};
 
-use std::io::MemWriter;
 use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::Encoder as SerializeEncoder;
-use std::string;
-use std::mem::{swap, transmute};
 
 /// Represents an XML-RPC data value
-#[deriving(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialEq, PartialOrd, Show)]
 pub enum Xml {
      I32(i32),
      F64(f64),
@@ -68,7 +70,7 @@ pub enum Xml {
      Base64(Vec<u8>), // FIXME: added for xml-rpc, not in JSON
      DateTime, // FIXME: need to implement
      Null,
- }
+}
 
 pub type Array = Vec<Xml>;
 pub type Object = BTreeMap<string::String, Xml>;
@@ -342,14 +344,15 @@ impl<'a> SerializeEncoder for Encoder<'a> {
 }
 
 impl Encodable for Xml {
-    fn encode<E: SerializeEncoder>(&self, e: &mut E) -> Result<(), E::Error> {
+    fn encode<S: SerializeEncoder>(&self, e: &mut S) -> Result<(), S::Error> {
         match *self {
             Xml::I32(v) => v.encode(e),
             Xml::F64(v) => v.encode(e),
             Xml::String(ref v) => v.encode(e),
             Xml::Boolean(v) => v.encode(e),
             Xml::Array(ref v) => v.encode(e),
-            //Xml::Object(ref v) => v.encode(e),
+            Xml::Object(ref v) => v.encode(e), // FIXME: had to add hardcoded
+                                               // impl for BTreeMap
             Xml::Null => e.emit_nil(),
             _ => Ok(()), // FIXME: add other types
         }
@@ -368,7 +371,7 @@ impl Xml {
 
     /// Attempts to get a nested XML Object for each key in `keys`.
     /// If any key is found not to exist, find_path will return None.
-    /// Otherwise, it will return the Json value associated with the final key.
+    /// Otherwise, it will return the Xml value associated with the final key.
     pub fn find_path<'a>(&'a self, keys: &[&str]) -> Option<&'a Xml>{
         let mut target = self;
         for key in keys.iter() {
@@ -517,7 +520,7 @@ impl Xml {
     }
 }
 
-impl<'a> ops::Index<&'a str>  for Xml {
+impl<'a> Index<&'a str>  for Xml {
     type Output = Xml;
 
     fn index(&self, idx: & &str) -> &Xml {
@@ -525,13 +528,137 @@ impl<'a> ops::Index<&'a str>  for Xml {
     }
 }
 
-impl ops::Index<usize> for Xml {
+impl Index<usize> for Xml {
     type Output = Xml;
 
     fn index<'a>(&'a self, idx: &usize) -> &'a Xml {
         match self {
             &Xml::Array(ref v) => v.index(idx),
             _ => panic!("can only index XML with usize if it is an array")
+        }
+    }
+}
+
+/// A trait for converting values to XML
+pub trait ToXml {
+    /// Converts the value of `self` to an instance of XML
+    fn to_xml(&self) -> Xml;
+}
+
+macro_rules! to_xml_impl_i32 {
+    ($($t:ty), +) => (
+        $(impl ToXml for $t {
+            fn to_xml(&self) -> Xml { Xml::I32(*self as i32) }
+        })+
+    )
+}
+
+to_xml_impl_i32! { isize, i8, i16, i32, i64 }
+to_xml_impl_i32! { usize, u8, u16, u32, u64 }
+
+impl ToXml for Xml {
+    fn to_xml(&self) -> Xml { self.clone() }
+}
+
+impl ToXml for f32 {
+    fn to_xml(&self) -> Xml { (*self as f64).to_xml() }
+}
+
+impl ToXml for f64 {
+    fn to_xml(&self) -> Xml {
+        Xml::F64(*self)
+        /* // FIXME: look up XML-RPC float behavior
+        use std::num::FpCategory::{Nan, Infinite};
+
+        match self.classify() {
+            Nan | Infinite => Xml::Null,
+            _                  => Xml::F64(*self)
+        }
+        */
+    }
+}
+
+impl ToXml for () {
+    fn to_xml(&self) -> Xml { Xml::Null }
+}
+
+impl ToXml for bool {
+    fn to_xml(&self) -> Xml { Xml::Boolean(*self) }
+}
+
+impl ToXml for str {
+    fn to_xml(&self) -> Xml { Xml::String(self.to_string()) }
+}
+
+impl ToXml for string::String {
+    fn to_xml(&self) -> Xml { Xml::String((*self).clone()) }
+}
+
+macro_rules! tuple_impl {
+    // use variables to indicate the arity of the tuple
+    ($($tyvar:ident),* ) => {
+        // the trailing commas are for the 1 tuple
+        impl<
+            $( $tyvar : ToXml ),*
+            > ToXml for ( $( $tyvar ),* , ) {
+
+            #[inline]
+            #[allow(non_snake_case)]
+            fn to_xml(&self) -> Xml {
+                match *self {
+                    ($(ref $tyvar),*,) => Xml::Array(vec![$($tyvar.to_xml()),*])
+                }
+            }
+        }
+    }
+}
+
+tuple_impl!{A}
+tuple_impl!{A, B}
+tuple_impl!{A, B, C}
+tuple_impl!{A, B, C, D}
+tuple_impl!{A, B, C, D, E}
+tuple_impl!{A, B, C, D, E, F}
+tuple_impl!{A, B, C, D, E, F, G}
+tuple_impl!{A, B, C, D, E, F, G, H}
+tuple_impl!{A, B, C, D, E, F, G, H, I}
+tuple_impl!{A, B, C, D, E, F, G, H, I, J}
+tuple_impl!{A, B, C, D, E, F, G, H, I, J, K}
+tuple_impl!{A, B, C, D, E, F, G, H, I, J, K, L}
+
+impl<A: ToXml> ToXml for [A] {
+    fn to_xml(&self) -> Xml { Xml::Array(self.iter().map(|elt| elt.to_xml()).collect()) }
+}
+
+impl<A: ToXml> ToXml for Vec<A> {
+    fn to_xml(&self) -> Xml { Xml::Array(self.iter().map(|elt| elt.to_xml()).collect()) }
+}
+
+impl<A: ToXml> ToXml for BTreeMap<string::String, A> {
+    fn to_xml(&self) -> Xml {
+        let mut d = BTreeMap::new();
+        for (key, value) in self.iter() {
+            d.insert((*key).clone(), value.to_xml());
+        }
+        Xml::Object(d)
+    }
+}
+
+impl<A: ToXml> ToXml for HashMap<string::String, A> {
+    fn to_xml(&self) -> Xml {
+        let mut d = BTreeMap::new();
+        for (key, value) in self.iter() {
+            d.insert((*key).clone(), value.to_xml());
+        }
+        Xml::Object(d)
+    }
+}
+
+impl<A:ToXml> ToXml for Option<A> {
+    fn to_xml(&self) -> Xml {
+        match *self {
+            None => Xml::Null,
+            Some(ref value) => value.to_xml()
         }
     }
 }

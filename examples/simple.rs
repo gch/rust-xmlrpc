@@ -12,7 +12,7 @@ fn main() {
     println!("XML of bool (true): {}", xmlrpc::encode(&true));
     println!("XML of bool (false): {}", xmlrpc::encode(&false));
 
-    #[deriving(RustcEncodable)]
+    #[derive(RustcEncodable)]
     struct MyStruct {
         value: String
     }
@@ -39,7 +39,7 @@ fn main() {
 
     // make an Xml object of an arbitrary struct
     // FIXME: is there a way to automatically translate this into BTreeMap?
-    //#[deriving(RustcEncodable)]
+    //#[derive(RustcEncodable)]
     //struct Person {
     //    name: &'static str,
     //    age: i32
@@ -47,8 +47,7 @@ fn main() {
     //let p = Person { name: "Clark", age: 35 };
     //println!("XML of person: {}", xmlrpc::encode(&xmlrpc::Xml::Object(p)));
 
-    /* // FIXME: add back in after we re-enable object encoding
-    #[deriving(RustcEncodable)]
+    #[derive(RustcEncodable)]
     struct City {
         name: &'static str,
         // Latitude
@@ -66,5 +65,4 @@ fn main() {
         println!("JSON: {}", json::encode(city));
         println!("XML: {}", xmlrpc::encode(city));
     }
-    */
 }
