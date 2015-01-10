@@ -92,7 +92,6 @@ pub fn error_str(error: ErrorCode) -> &'static str {
     }
 }
 
-/*
 /// Shortcut function to decode a XML `&str` into an object
 pub fn decode<T: Decodable>(s: &str) -> DecodeResult<T> {
     let xml = match Xml::from_str(s) {
@@ -103,7 +102,7 @@ pub fn decode<T: Decodable>(s: &str) -> DecodeResult<T> {
     let mut decoder = Decoder::new(xml);
     Decodable::decode(&mut decoder)
 }
-*/
+
 /// Shortcut function to encode a `T` into an XML `String`
 pub fn encode<T: Encodable>(object: &T) -> string::String {
     let mut s = String::new();

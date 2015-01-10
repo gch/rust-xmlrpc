@@ -45,7 +45,7 @@ Additional errata and hints can be found here:
 extern crate "rustc-serialize" as rustc_serialize;
 extern crate xml;
 
-pub use encoding::{encode, Encoder, Xml};
+pub use encoding::{encode,decode,Encoder,Decoder,Xml};
 pub mod encoding;
 
 #[cfg(test)]
