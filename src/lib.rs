@@ -20,7 +20,10 @@
 
 #![forbid(non_camel_case_types)]
 #![allow(missing_docs)]
-
+#![allow(unused_attributes)]
+#![allow(unstable)] // FIXME: switch to rustc-serialize
+#![allow(unused_variables)] // FIXME: remove
+#![allow(unused_imports)]
 #![feature(slicing_syntax)]
 #![feature(int_uint)] // FIXME: remove
 
@@ -310,7 +313,9 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         //write!(self.writer, "}}")
     }
 
-    fn emit_map_elt_key<F>(&mut self, idx: uint, mut f: F) -> EncodeResult where
+    //fn emit_map_elt_key<F>(&mut self, idx: uint, mut f: F) -> EncodeResult where
+    // FIXME: implement
+    fn emit_map_elt_key<F>(&mut self, idx: uint, f: F) -> EncodeResult where
         F: FnMut(&mut Encoder<'a>) -> EncodeResult,
     {
         //if idx != 0 { try!(write!(self.writer, ",")) }
