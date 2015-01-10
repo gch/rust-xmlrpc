@@ -1,7 +1,7 @@
 extern crate xmlrpc;
-extern crate serialize;
-use serialize::Encodable;
-use serialize::json;
+extern crate "rustc-serialize" as rustc_serialize;
+use rustc_serialize::Encodable;
+use rustc_serialize::json;
 
 fn main() {
 
@@ -12,7 +12,7 @@ fn main() {
     println!("XML of bool (true): {}", xmlrpc::encode(&true));
     println!("XML of bool (false): {}", xmlrpc::encode(&false));
 
-    #[deriving(Encodable)]
+    #[deriving(RustcEncodable)]
     struct MyStruct {
         value: String
     }
@@ -39,7 +39,7 @@ fn main() {
 
     // make an Xml object of an arbitrary struct
     // FIXME: is there a way to automatically translate this into BTreeMap?
-    //#[deriving(Encodable)]
+    //#[deriving(RustcEncodable)]
     //struct Person {
     //    name: &'static str,
     //    age: i32
@@ -48,7 +48,7 @@ fn main() {
     //println!("XML of person: {}", xmlrpc::encode(&xmlrpc::Xml::Object(p)));
 
     /* // FIXME: add back in after we re-enable object encoding
-    #[deriving(Encodable)]
+    #[deriving(RustcEncodable)]
     struct City {
         name: &'static str,
         // Latitude

@@ -21,11 +21,10 @@
 #![forbid(non_camel_case_types)]
 #![allow(missing_docs)]
 #![allow(unused_attributes)]
-#![allow(unstable)] // FIXME: switch to rustc-serialize
+#![allow(unstable)]
 #![allow(unused_variables)] // FIXME: remove
 #![allow(unused_imports)]
 #![feature(slicing_syntax)]
-#![feature(int_uint)] // FIXME: remove
 
 /*!
 XML-RPC library, including both serialization and remote procedure calling
@@ -44,15 +43,16 @@ Additional errata and hints can be found here:
     http://effbot.org/zone/xmlrpc-errata.htm
 */
 
-extern crate serialize;
+//extern crate serialize;
+extern crate "rustc-serialize" as rustc_serialize;
 
 use std::collections::{HashMap, BTreeMap};
 use std::{io, fmt, mem, str, num};
 use std::ops;
 
 use std::io::MemWriter;
-use serialize::{Encodable, Decodable};
-use serialize::Encoder as SerializeEncoder;
+use rustc_serialize::{Encodable, Decodable};
+use rustc_serialize::Encoder as SerializeEncoder;
 use std::string;
 use std::mem::{swap, transmute};
 
@@ -119,16 +119,15 @@ impl<'a> Encoder<'a> {
 
 impl<'a> SerializeEncoder for Encoder<'a> {
     type Error = fmt::Error;
-    //type Error = std::io::IoError; // FIXME: remove
-
     fn emit_nil(&mut self) -> EncodeResult { write!(self.writer, "<nil/>") }
-    fn emit_uint(&mut self, v: uint) -> EncodeResult { self.emit_i32(v as i32) }
+
+    fn emit_usize(&mut self, v: usize) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_u64(&mut self, v: u64) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_u32(&mut self, v: u32) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_u16(&mut self, v: u16) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_u8(&mut self, v: u8) -> EncodeResult { self.emit_i32(v as i32) }
 
-    fn emit_int(&mut self, v: int) -> EncodeResult { self.emit_i32(v as i32) }
+    fn emit_isize(&mut self, v: isize) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_i64(&mut self, v: i64) -> EncodeResult { self.emit_i32(v as i32) }
     fn emit_i32(&mut self, v: i32) -> EncodeResult { // XML-RPC only supports 4-byte signed integer
         // FIXME, precondition numbers to check range
@@ -163,12 +162,10 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         f(self)
     }
 
-
-
     fn emit_enum_variant<F>(&mut self,
                             name: &str,
-                            _id: uint,
-                            cnt: uint,
+                            _id: usize,
+                            cnt: usize,
                             f: F)
                             -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
@@ -206,7 +203,7 @@ impl<'a> SerializeEncoder for Encoder<'a> {
     }
 
 
-    fn emit_enum_variant_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+    fn emit_enum_variant_arg<F>(&mut self, idx: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         if idx != 0 {
@@ -217,8 +214,8 @@ impl<'a> SerializeEncoder for Encoder<'a> {
 
     fn emit_enum_struct_variant<F>(&mut self,
                                    name: &str,
-                                   id: uint,
-                                   cnt: uint,
+                                   id: usize,
+                                   cnt: usize,
                                    f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
@@ -227,14 +224,14 @@ impl<'a> SerializeEncoder for Encoder<'a> {
 
     fn emit_enum_struct_variant_field<F>(&mut self,
                                          _: &str,
-                                         idx: uint,
+                                         idx: usize,
                                          f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         self.emit_enum_variant_arg(idx, f)
     }
 
-    fn emit_struct<F>(&mut self, _: &str, _: uint, f: F) -> EncodeResult where
+    fn emit_struct<F>(&mut self, _: &str, _: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         try!(write!(self.writer, "<struct>"));
@@ -242,7 +239,7 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         write!(self.writer, "</struct>")
     }
 
-    fn emit_struct_field<F>(&mut self, name: &str, idx: uint, f: F) -> EncodeResult where
+    fn emit_struct_field<F>(&mut self, name: &str, idx: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         try!(write!(self.writer, "<member>"));
@@ -253,23 +250,23 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         write!(self.writer, "</member>")
     }
 
-    fn emit_tuple<F>(&mut self, len: uint, f: F) -> EncodeResult where
+    fn emit_tuple<F>(&mut self, len: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         self.emit_seq(len, f)
     }
-    fn emit_tuple_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+    fn emit_tuple_arg<F>(&mut self, idx: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         self.emit_seq_elt(idx, f)
     }
 
-    fn emit_tuple_struct<F>(&mut self, _name: &str, len: uint, f: F) -> EncodeResult where
+    fn emit_tuple_struct<F>(&mut self, _name: &str, len: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         self.emit_seq(len, f)
     }
-    fn emit_tuple_struct_arg<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+    fn emit_tuple_struct_arg<F>(&mut self, idx: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         self.emit_seq_elt(idx, f)
@@ -287,7 +284,7 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         f(self)
     }
 
-    fn emit_seq<F>(&mut self, _len: uint, f: F) -> EncodeResult where
+    fn emit_seq<F>(&mut self, _len: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         try!(write!(self.writer, "<array><data>"));
@@ -295,7 +292,7 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         write!(self.writer, "</data></array>")
     }
 
-    fn emit_seq_elt<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+    fn emit_seq_elt<F>(&mut self, idx: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         try!(write!(self.writer, "<value>"));
@@ -303,7 +300,7 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         write!(self.writer, "</value>")
     }
 
-    fn emit_map<F>(&mut self, _len: uint, f: F) -> EncodeResult where
+    fn emit_map<F>(&mut self, _len: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         Ok(())
@@ -313,9 +310,9 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         //write!(self.writer, "}}")
     }
 
-    //fn emit_map_elt_key<F>(&mut self, idx: uint, mut f: F) -> EncodeResult where
+    //fn emit_map_elt_key<F>(&mut self, idx: usize, mut f: F) -> EncodeResult where
     // FIXME: implement
-    fn emit_map_elt_key<F>(&mut self, idx: uint, f: F) -> EncodeResult where
+    fn emit_map_elt_key<F>(&mut self, idx: usize, f: F) -> EncodeResult where
         F: FnMut(&mut Encoder<'a>) -> EncodeResult,
     {
         //if idx != 0 { try!(write!(self.writer, ",")) }
@@ -335,7 +332,7 @@ impl<'a> SerializeEncoder for Encoder<'a> {
         Ok(())
     }
 
-    fn emit_map_elt_val<F>(&mut self, _idx: uint, f: F) -> EncodeResult where
+    fn emit_map_elt_val<F>(&mut self, _idx: usize, f: F) -> EncodeResult where
         F: FnOnce(&mut Encoder<'a>) -> EncodeResult,
     {
         Ok(())
@@ -528,13 +525,13 @@ impl<'a> ops::Index<&'a str>  for Xml {
     }
 }
 
-impl ops::Index<uint> for Xml {
+impl ops::Index<usize> for Xml {
     type Output = Xml;
 
-    fn index<'a>(&'a self, idx: &uint) -> &'a Xml {
+    fn index<'a>(&'a self, idx: &usize) -> &'a Xml {
         match self {
             &Xml::Array(ref v) => v.index(idx),
-            _ => panic!("can only index XML with uint if it is an array")
+            _ => panic!("can only index XML with usize if it is an array")
         }
     }
 }
