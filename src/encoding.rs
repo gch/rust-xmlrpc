@@ -24,6 +24,10 @@ use std;
 use rustc_serialize::{Encodable, Decodable};
 use rustc_serialize::Encoder as SerializeEncoder;
 
+use xml;
+use xml::reader::EventReader;
+use xml::reader::events::XmlEvent;
+
 /// Represents an XML-RPC data value
 #[derive(Clone, PartialEq, PartialOrd, Show)]
 pub enum Xml {
@@ -41,7 +45,30 @@ pub enum Xml {
 pub type Array = Vec<Xml>;
 pub type Object = BTreeMap<string::String, Xml>;
 
-/// Shortcut function to encode a `T` into an XML-RPC `String`
+pub struct AsXml<'a, T: 'a> { inner: &'a T }
+
+#[derive(Clone, PartialEq, Show)]
+pub enum DecoderError {
+    //ParseError(ParserError),
+    ExpectedError(string::String, string::String),
+    MissingFieldError(string::String),
+    UnknownVariantError(string::String),
+    ApplicationError(string::String)
+}
+
+/*
+/// Shortcut function to decode a XML `&str` into an object
+pub fn decode<T: Decodable>(s: &str) -> DecodeResult<T> {
+    let xml = match Xml::from_str(s) {
+        Ok(x) => x,
+        Err(e) => return Err(ParseError(e))
+    };
+
+    let mut decoder = Decoder::new(xml);
+    Decodable::decode(&mut decoder)
+}
+*/
+/// Shortcut function to encode a `T` into an XML `String`
 pub fn encode<T: Encodable>(object: &T) -> string::String {
     let mut s = String::new();
     {
@@ -51,18 +78,29 @@ pub fn encode<T: Encodable>(object: &T) -> string::String {
     s
 }
 
-/// Shortcut function to encode a `T` into a XML-RPC `String`
-//pub fn encode<'a, T: Encodable<Encoder<'a>, io::IoError>>(object: &T) -> string::String {
-//    let buff = Encoder::buffer_encode(object);
-//    string::String::from_utf8(buff).unwrap()
-//}
+impl StdError for DecoderError {
+    fn description(&self) -> &str { "decoder error" }
+    fn detail(&self) -> Option<std::string::String> { Some(format!("{:?}", self)) }
+    fn cause(&self) -> Option<&StdError> {
+        match *self {
+            //DecoderError::ParseError(ref e) => Some(e as &StdError),
+            _ => None,
+        }
+    }
+}
+
+/*
+impl StdError for ParserError {
+    fn description(&self) -> &str { "failed to parse xml" }
+    fn detail(&self) -> Option<std::string::String> { Some(format!("{:?}", self)) }
+}
+*/
 
 pub type EncodeResult = fmt::Result;
-//pub type DecodeResult<T> = Result<T, DecoderError>;
+pub type DecodeResult<T> = Result<T, DecoderError>;
 
 fn escape_str(wr: &mut fmt::Writer, v: &str) -> fmt::Result {
-    // FIXME: xml encodings
-    wr.write_str(v)
+    wr.write_str(xml::escape::escape_str(v).as_slice())
 }
 
 fn escape_char(writer: &mut fmt::Writer, v: char) -> fmt::Result {
