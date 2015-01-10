@@ -1,22 +1,15 @@
 [package]
 name = "rust-xmlrpc"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Galen Clark Haynes <gch@users.noreply.github.com>"]
 
 [lib]
 name = "xmlrpc"
 path = "src/lib.rs"
 
-# [dependencies.http]
-# git = "https://github.com/chris-morgan/rust-http.git"
-
-# [[example]]
-# name = "ros_get_system_state"
-# path = "examples/ros_get_system_state.rs"
-
-# [[example]]
-# name = "datatypes_example"
-# path = "examples/datatypes_example.rs"
+[dependencies]
+rustc-serialize = "0.2.7"
+# hyper = 0.0.17 # FIXME
 
 [[example]]
 name = "simple"
