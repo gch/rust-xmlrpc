@@ -14,7 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 rustc-serialize = "0.2.7"
 xml-rs = "0.1.12"
-#hyper = "0.0.21"
+hyper = "0.1.0"
 
 [[example]]
 name = "simple"
