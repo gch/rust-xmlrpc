@@ -424,6 +424,13 @@ impl Xml {
         builder.build()
     }
 
+    // FIXME: this should give us a method to build objects from an existing xml parser
+    // such as for interpreting xml requests
+    pub fn from_parser<B: Buffer>(p: xml::EventReader<B>) -> Result<Self, BuilderError> {
+        let mut builder = Builder { parser: p, token: None };
+        builder.build()
+    }
+
     /// If the XML value is an Object, returns the value associated with the provided key.
     /// Otherwise, returns None.
     pub fn find<'a>(&'a self, key: &str) -> Option<&'a Xml>{
@@ -658,14 +665,10 @@ impl<B: Buffer> Builder<B> {
             None => {}
             Some(XmlEvent::Error(e)) => { return Err(e); }
             ref tok => { panic!("unexpected token {:?}", tok.clone()); }
+            // FIXME: we will need some way to parse a parameter only, and not error on </param>
+            // ?? make separate self.build_param()?
         }
         result
-        /* // previous, simpler version
-        match self.build_value() {
-            Ok(v) => Ok(v),
-            Err(e) => Err(DecoderError::MissingFieldError("foobar".to_string())), // FIXME
-        }
-        */
     }
 
     fn bump(&mut self) {
@@ -694,6 +697,14 @@ impl<B: Buffer> Builder<B> {
             _ => None,
         }
     }
+   
+    /* try to figure out how to get row and col
+    pub fn generate_syntax_error(&self, e: ErrorCode) -> BuilderError {
+        SyntaxError(e, 
+                    self.parser.parser.lexer.row,
+                    self.parser.parser.lexer.col)
+    }
+    */
 
     pub fn build_value(&mut self) -> Result<Xml, BuilderError> {
         match self.token {
