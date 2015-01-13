@@ -20,3 +20,7 @@ hyper = "0.1.0"
 name = "simple"
 path = "examples/simple.rs"
 
+#[[example]]
+#name = "ros_client_example"
+#path = "examples/ros_client_example.rs"
+
