@@ -44,10 +44,14 @@ Additional errata and hints can be found here:
 
 extern crate "rustc-serialize" as rustc_serialize;
 extern crate xml;
+extern crate hyper;
 
 pub use encoding::{encode,decode,Encoder,Decoder,Xml};
+pub use client::{Client};
+pub use protocol::{Request};
 pub mod encoding;
-
+pub mod client;
+pub mod protocol;
 #[cfg(test)]
 mod tests {
 

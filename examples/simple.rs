@@ -1,12 +1,14 @@
+#![allow(unstable)]
+
 extern crate xmlrpc;
 extern crate "rustc-serialize" as rustc_serialize;
-use rustc_serialize::Encodable;
-use rustc_serialize::json;
+//use rustc_serialize::Encodable;
+//use rustc_serialize::json;
 
 fn main() {
 
     println!("This module shows basic functionality of serialization for the XML-RPC protocol.");
-    
+
     println!("\n==== Strings ====");
     let a = "Hello, world!".to_string();
     println!("Before encode: {}", a);
