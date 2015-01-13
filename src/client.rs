@@ -20,7 +20,7 @@ impl Client {
         Client { url: s.to_string() }
     }
 
-    pub fn remote_call(&self, request: super::Request) -> () {
+    pub fn remote_call(&self, request: &super::Request) -> () {
         let mut http_client = hyper::Client::new();
         let mut result = http_client.post(self.url.as_slice())
             .body(request.body.as_slice()) // FIXME: use to_xml() somehow?
