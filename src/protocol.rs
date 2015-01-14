@@ -9,10 +9,14 @@
 // Rust XML-RPC library
 
 use std::string;
-use rustc_serialize::{Encodable};
+use rustc_serialize::{Encodable,Decodable};
 
 pub struct Request {
     pub method: string::String,
+    pub body: string::String,
+}
+
+pub struct Response {
     pub body: string::String,
 }
 
@@ -38,4 +42,23 @@ impl Request {
         self
     }
 
+}
+
+impl Response {
+    pub fn new(body: &str) -> Response {
+        Response {
+            body: body.to_string(),
+        }
+    }
+
+    pub fn result<T: Decodable>(&self, idx: usize) -> Option<T> {
+        // FIXME: use idx
+        let resp = self.body.clone(); // FIXME: no need to clone
+        let val0 = "<params>\n<param>\n<value>"; // FIXME: use xml-rs rather than manual search
+        let idx0 = resp.find_str(val0).unwrap() + val0.len();
+        let val1 = "</value>\n</param>\n</params>";
+        let idx1 = resp.find_str(val1).unwrap();
+        let object: T = super::decode(resp.slice(idx0,idx1)).unwrap();
+        Some(object)
+    }
 }

@@ -48,7 +48,7 @@ extern crate hyper;
 
 pub use encoding::{encode,decode,Encoder,Decoder,Xml};
 pub use client::{Client};
-pub use protocol::{Request};
+pub use protocol::{Request,Response};
 pub mod encoding;
 pub mod client;
 pub mod protocol;
