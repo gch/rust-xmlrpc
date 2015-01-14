@@ -865,6 +865,7 @@ impl<B: Buffer> Builder<B> {
         self.bump();
         let val = match self.token {
             Some(XmlEvent::StringValue(ref s)) => Ok(Xml::String(s.to_string())),
+            Some(XmlEvent::StringEnd) => return Ok(Xml::String("".to_string())),
             _ => Err(SyntaxError(InvalidSyntax,0,0)),
         };
         self.bump();
