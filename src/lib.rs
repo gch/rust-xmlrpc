@@ -13,7 +13,7 @@
 
 #![crate_name = "xmlrpc"]
 #![comment = "Rust XML-RPC library"]
-#![license = "BSD"]
+#![license = "Apache/MIT"]
 #![crate_type = "rlib"]
 #![crate_type = "dylib"]
 
